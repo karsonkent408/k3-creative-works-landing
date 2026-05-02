@@ -1,9 +1,14 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import '../styles/global.css';
+const siteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY;
 ---
 
 <Layout>
+
+<Fragment slot="head">
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</Fragment>
 
 <!-- ══ CURSOR ══════════════════════════════════════ -->
 <div class="cursor" id="cursor" aria-hidden="true">
@@ -219,6 +224,15 @@ import '../styles/global.css';
           <textarea id="message" name="message" rows="4" placeholder="Tell us about your project…" required></textarea>
           <span class="field__border"></span>
         </div>
+        <!-- Honeypot — hidden from real users, bots fill it in -->
+        <div class="hp-field" aria-hidden="true">
+          <label for="website">Website</label>
+          <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
+        </div>
+
+        <!-- Cloudflare Turnstile -->
+        <div class="cf-turnstile" data-sitekey={siteKey} data-theme="light" style="margin-bottom:20px"></div>
+
         <button type="submit" class="submit-btn" data-magnetic id="submit-btn">
           <span class="submit-btn__text">Send Message</span>
           <span class="submit-btn__icon" aria-hidden="true">
@@ -229,6 +243,7 @@ import '../styles/global.css';
           <span class="submit-btn__loader" aria-hidden="true"></span>
         </button>
       </form>
+      <p class="form-error" id="form-error" hidden></p>
       <div class="contact__success" id="form-success" hidden>
         <div class="success__icon" aria-hidden="true">
           <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
@@ -259,6 +274,16 @@ import '../styles/global.css';
 </Layout>
 
 <style>
+/* ── Honeypot ─────────────────────────────────── */
+.hp-field {
+  position: absolute;
+  left: -9999px;
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  overflow: hidden;
+}
+
 /* ── Cursor ───────────────────────────────────── */
 .cursor {
   pointer-events: none;
@@ -778,6 +803,15 @@ body.cursor-click .cursor__dot  { width: 12px; height: 12px; }
 
 .field input::placeholder,
 .field textarea::placeholder { color: var(--silver-400); }
+
+.form-error {
+  margin-top: -8px; margin-bottom: 16px;
+  padding: 12px 16px;
+  background: rgba(220, 60, 60, .08);
+  border: 1px solid rgba(220, 60, 60, .25);
+  border-radius: 8px;
+  color: #c03030; font-size: .875rem; line-height: 1.5;
+}
 
 .submit-btn {
   display: inline-flex; align-items: center; gap: 10px;
@@ -1314,12 +1348,14 @@ document.querySelectorAll('.js-reveal').forEach((el, i) => {
 
 // ── Contact form ──────────────────────────────
 const form      = document.getElementById('contact-form') as HTMLFormElement | null;
-const formWrap  = form?.parentElement;
 const success   = document.getElementById('form-success');
 const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement | null;
+const errorBanner = document.getElementById('form-error');
 
-form?.addEventListener('submit', (e) => {
+form?.addEventListener('submit', async (e) => {
   e.preventDefault();
+
+  // Client-side validation
   let valid = true;
   form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('[required]').forEach(f => {
     const ok = f.value.trim() !== '';
@@ -1328,14 +1364,42 @@ form?.addEventListener('submit', (e) => {
   });
   if (!valid) return;
 
-  submitBtn?.classList.add('loading');
+  // Hide any previous error
+  if (errorBanner) { errorBanner.hidden = true; errorBanner.textContent = ''; }
 
-  setTimeout(() => {
-    if (form && success) {
+  submitBtn?.classList.add('loading');
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    const res = await fetch('/api/contact', {
+      method: 'POST',
+      body: new FormData(form),
+    });
+
+    const data = await res.json() as { ok?: boolean; error?: string };
+
+    if (res.ok && data.ok) {
       form.style.display = 'none';
-      success.hidden = false;
-      success.classList.add('visible');
+      if (success) {
+        success.hidden = false;
+        success.classList.add('visible');
+      }
+    } else {
+      throw new Error(data.error ?? 'Something went wrong. Please try again.');
     }
-  }, 900);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+    if (errorBanner) {
+      errorBanner.textContent = msg;
+      errorBanner.hidden = false;
+    }
+    submitBtn?.classList.remove('loading');
+    if (submitBtn) submitBtn.disabled = false;
+
+    // Reset Turnstile so user can retry
+    if (typeof (window as any).turnstile !== 'undefined') {
+      (window as any).turnstile.reset();
+    }
+  }
 });
 </script>

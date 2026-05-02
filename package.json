@@ -11,6 +11,8 @@
     "astro": "astro"
   },
   "dependencies": {
-    "astro": "^4.15.0"
+    "@astrojs/cloudflare": "^10.4.2",
+    "astro": "^4.15.0",
+    "resend": "^4.0.0"
   }
 }

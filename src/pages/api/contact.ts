@@ -86,9 +86,9 @@ export const POST: APIRoute = async ({ request }) => {
   const resend = new Resend(resendKey);
   const serviceLabel = SERVICE_LABELS[service] ?? service;
 
-  const { error: sendError } = await resend.emails.send({
-    from: 'K3 Contact Form <contact@k3creativeworks.com>',
-    to: ['hello@k3creativeworks.com'],
+  const { data: sendData, error: sendError } = await resend.emails.send({
+    from: 'K3 Contact Form <contact@k3-creative-works.com>',
+    to: ['karsonhkent@gmail.com'],
     replyTo: email,
     subject: `New inquiry from ${name} — ${serviceLabel}`,
     html: `
@@ -131,9 +131,11 @@ export const POST: APIRoute = async ({ request }) => {
   });
 
   if (sendError) {
-    console.error('Resend error:', sendError);
+    console.error('Resend error:', JSON.stringify(sendError, null, 2));
     return json({ error: 'Failed to send message. Please try again.' }, 500);
   }
+
+  console.log('Email sent successfully, id:', sendData?.id);
 
   return json({ ok: true });
 };
